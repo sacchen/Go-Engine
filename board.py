@@ -58,12 +58,13 @@ class Board:
         if color == Stone.EMPTY:  # Empty positions return empty sets
             return (group, liberties)
 
-        # in the future, maybe use a liberty_count per group
         def dfs(row: int, col: int) -> None:
+            if not (0 <= row < self.size and 0 <= col < self.size):
+                return
 
             if (row, col) in visited:
                 return
-            visited.add((row, col))  # Add the Stone
+            visited.add((row, col))
 
             current_color = self.grid[row][col]
 
@@ -72,15 +73,11 @@ class Board:
                 return
             elif current_color == color:
                 group.add((row, col))
+                # Check all adjacent positions
                 for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
                     new_r = row + dr
                     new_c = col + dc
                     if 0 <= new_r < self.size and 0 <= new_c < self.size:
-                        # If adjacent position is empty, it's a liberty.
-                        # Need to check for liberties around group
-                        if self.grid[new_r][new_c] == Stone.EMPTY:
-                            liberties.add((new_r, new_c))
-                        # Continue DFS for connected stones
                         dfs(new_r, new_c)
 
         dfs(row, col)

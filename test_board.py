@@ -15,12 +15,35 @@ class TestBoard(unittest.TestCase):
         # . . . . .
         # . . . . .
 
-        board.place_stone(1, 1)  # First black stone
-        board.place_stone(1, 2)  # Second black stone
-        board.place_stone(2, 1)  # Third black stone
+        # Place first black stone
+        board.place_stone(1, 1)
+        # Switch back to black
+        board.switch_turn()
+        # Place second black stone
+        board.place_stone(1, 2)
+        # Switch back to black
+        board.switch_turn()
+        # Place third black stone
+        board.place_stone(2, 1)
+
+        # Print board state for debugging
+        print("\nBoard state:")
+        for i in range(5):
+            row = ""
+            for j in range(5):
+                if board.grid[i][j] == Stone.BLACK:
+                    row += "B "
+                elif board.grid[i][j] == Stone.WHITE:
+                    row += "W "
+                else:
+                    row += ". "
+            print(row)
 
         # Test the group and liberties for the black group
         group, liberties = board.get_group_and_liberties(1, 1)
+        
+        print("\nFound group:", group)
+        print("Expected group:", {(1, 1), (1, 2), (2, 1)})
 
         # The group should contain all three black stones
         expected_group = {(1, 1), (1, 2), (2, 1)}
