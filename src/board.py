@@ -19,13 +19,40 @@ class Board:
         self.move_history: List[Optional[Tuple[int, int]]] = []
 
     def place_stone(self, row: int, col: int) -> None:
+        """
+        1. Place the stone
+        2. Check for capturing enemy groups
+        3. Check if the placed stone's group has liberties
+        4. If no liberties and no captures, take the stone off
+        """
+
         if not (0 <= row < self.size and 0 <= col < self.size):
             raise IndexError(f"Move ({row},{col}) out of bounds")
-
         if self.grid[row][col] is not Stone.EMPTY:
             raise ValueError("Illegal move: space occupied.")
 
-        self.grid[row][col] = self.current_turn
+        self.grid[row][col] = self.current_turn  # Tentatively place move
+        captured_any = False
+
+        enemy_color = Stone.BLACK if self.current_turn == Stone.WHITE else Stone.WHITE
+
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:  # Check adjacent
+            nr, nc = row + dr, col + dc  # Get new coordinates
+            if 0 <= nr < self.size and 0 <= nc < self.size:  # Check within bounds
+                if self.grid[nr][nc] == enemy_color:  # If it is enemy group
+                    group, liberties = self.get_group_and_liberties(nr, nc)
+                    if not liberties:  # If no liberties,
+                        captured_any = True  # Then capture
+                        for r, c in group:  # For coordinates in enemy group
+                            self.grid[r][c] = Stone.EMPTY  # Set to empty
+
+        # Capturing takes precedence over suicide
+        # Do not allow move if player's group has no liberties
+        group, liberties = self.get_group_and_liberties(row, col)
+        if not liberties and not captured_any:  # If no liberties and no captures
+            self.grid[row][col] = Stone.EMPTY  # Revert the move
+            raise ValueError("Illegal move: suicide is not allowed.")
+
         self.move_history.append((row, col))
         self.switch_turn()
 
