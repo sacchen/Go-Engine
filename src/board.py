@@ -20,10 +20,12 @@ class Board:
 
     def place_stone(self, row: int, col: int) -> None:
         """
-        1. Place the stone
-        2. Check for capturing enemy groups
-        3. Check if the placed stone's group has liberties
-        4. If no liberties and no captures, take the stone off
+        # 1. Tentatively place stone.
+        # 2. Collect adjacent enemy groups (only check each group once).
+        # 3. Capture any enemy groups with no liberties.
+        # 4. If no captures and own group is dead, revert the move (suicide rule).
+        # Capturing takes precedence over suicide.
+        # Board state is only finalized after all checks pass.
         """
 
         if not (0 <= row < self.size and 0 <= col < self.size):
@@ -31,28 +33,49 @@ class Board:
         if self.grid[row][col] is not Stone.EMPTY:
             raise ValueError("Illegal move: space occupied.")
 
-        self.grid[row][col] = self.current_turn  # Tentatively place move
+        # Remember previous state and tentatively place stone
+        previous_state = self.grid[row][col]
+        self.grid[row][col] = self.current_turn
+
+        # Determine enemy color
+        enemy_color = Stone.BLACK if self.current_turn == Stone.WHITE else Stone.WHITE
         captured_any = False
 
-        enemy_color = Stone.BLACK if self.current_turn == Stone.WHITE else Stone.WHITE
+        # Collect unique adjacent enemy groups
+        # Use a set to avoid rechecking the same group
+        adjacent_enemies = {
+            (row + dr, col + dc)
+            for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]
+            if 0 <= row + dr < self.size
+            and 0 <= col + dc < self.size
+            and self.grid[row + dr][col + dc] == enemy_color
+        }
 
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:  # Check adjacent
-            nr, nc = row + dr, col + dc  # Get new coordinates
-            if 0 <= nr < self.size and 0 <= nc < self.size:  # Check within bounds
-                if self.grid[nr][nc] == enemy_color:  # If it is enemy group
-                    group, liberties = self.get_group_and_liberties(nr, nc)
-                    if not liberties:  # If no liberties,
-                        captured_any = True  # Then capture
-                        for r, c in group:  # For coordinates in enemy group
-                            self.grid[r][c] = Stone.EMPTY  # Set to empty
+        checked = set()
+        for er, ec in adjacent_enemies:
+            if (er, ec) in checked:
+                continue  # Skip if this group was already checked
 
-        # Capturing takes precedence over suicide
-        # Do not allow move if player's group has no liberties
-        group, liberties = self.get_group_and_liberties(row, col)
-        if not liberties and not captured_any:  # If no liberties and no captures
-            self.grid[row][col] = Stone.EMPTY  # Revert the move
+            # Check liberties of enemy group
+            group, liberties = self.get_group_and_liberties(er, ec)
+            checked.update(group)
+
+            if not liberties:
+                # Capture enemy group if no liberties
+                captured_any = True
+                for r, c in group:
+                    self.grid[r][c] = Stone.EMPTY
+
+        # Check for suicide
+        # If no enemy groups were captured and the placed stone has no liberties, revert the move
+        group, liberties = self.get_group_and_liberties(
+            row, col
+        )  # Check the stone about to be placed
+        if not liberties and not captured_any:
+            self.grid[row][col] = previous_state  # Roll back
             raise ValueError("Illegal move: suicide is not allowed.")
 
+        # Finalize move
         self.move_history.append((row, col))
         self.switch_turn()
 
@@ -77,6 +100,11 @@ class Board:
     def get_group_and_liberties(
         self, row: int, col: int
     ) -> Tuple[Set[Tuple[int, int]], Set[Tuple[int, int]]]:
+        """
+        Depth-first search starting at (row, col) returning:
+          group      - all same-color stones connected to the seed
+          liberties  - set of empty neighbouring points for that group
+        """
         visited = set()
         group = set()
         liberties = set()
