@@ -8,7 +8,7 @@ class TestBoardCapturing(unittest.TestCase):
         self.b = Board(size=5)
 
     def play(self, color: Stone, row: int, col: int):
-        """Place a stone of the given color, regardless of whose turn it “really” is."""
+        """Place a stone of the given color, regardless of whose turn it "really" is."""
         self.b.current_turn = color
         self.b.place_stone(row, col)
 
@@ -17,28 +17,22 @@ class TestBoardCapturing(unittest.TestCase):
 
         Args:
             expected_layout: List of strings where:
-                '.' = empty, 'B' = black, 'W' = white
+                '.' = empty, 'B' = black, 'W' = white, spaces are ignored
         """
         for r, row in enumerate(expected_layout):
-            for c, cell in enumerate(row.replace(" ", "")):
+            row_content = row.replace(" ", "")
+            for c, cell in enumerate(row_content):
                 expected = {".": Stone.EMPTY, "B": Stone.BLACK, "W": Stone.WHITE}[cell]
-                self.assertEqual(self.b.grid[r][c], expected, f"Mismatch at {r},{c}")
+                actual = self.b.grid[r][c]
+                self.assertEqual(
+                    actual,
+                    expected,
+                    f"Mismatch at {r},{c}: expected {expected}, got {actual}",
+                )
 
-    def setup_capture_scenario(self, center=(2, 2), color=Stone.WHITE):
-        """Setup a standard capture scenario with one stone surrounded on 4 sides.
-        Returns the coordinates of the surrounded stone and surrounding stones.
-        """
-        r, c = center
-        surrounded = [(r, c)]
-        surrounding = [(r - 1, c), (r + 1, c), (r, c - 1), (r, c + 1)]
+    def test_simple_capture_with_verify(self):
+        """Test capturing a single stone with board verification.
 
-        # Place the surrounded stone
-        self.play(color, r, c)
-
-        return surrounded, surrounding
-
-    def test_simple_capture(self):
-        """Test capturing a single stone.
         Initial setup:   After capture:
         . . . . .       . . . . .
         . . B . .       . . B . .
@@ -46,22 +40,42 @@ class TestBoardCapturing(unittest.TestCase):
         . . B . .       . . B . .
         . . . . .       . . . . .
         """
-        # White goes in center, then Black surrounds on all four sides
+        # Place the white stone to be captured
         self.play(Stone.WHITE, 2, 2)
+
+        # Verify initial setup
+        setup = [
+            ".....",
+            ".....",
+            "..W..",
+            ".....",
+            ".....",
+        ]
+        self.verify_board(setup)
+
+        # Place black stones around white
         for r, c in [(1, 2), (2, 1), (2, 3), (3, 2)]:
             self.play(Stone.BLACK, r, c)
-        # after the last black play, the white at (2,2) must be gone
-        self.assertEqual(self.b.grid[2][2], Stone.EMPTY)
+
+        # Verify final state after capture
+        expected = [
+            ".....",
+            "..B..",
+            ".B.B.",
+            "..B..",
+            ".....",
+        ]
+        self.verify_board(expected)
 
     def test_multi_group_setup(self):
         """Verify the multi-group setup has the expected properties.
 
         Board layout before final move:
-        . B . . .
-        B W B . .
+        . . B . .
+        . B W B .
         . . . . .
-        B W B . .
-        . B . . .
+        . B W B .
+        . . B . .
 
         Both white stones share only one liberty at (2,2).
         """
@@ -81,6 +95,16 @@ class TestBoardCapturing(unittest.TestCase):
         ]
         for r, c in surround:
             self.play(Stone.BLACK, r, c)
+
+        # Verify board state
+        expected = [
+            "..B..",
+            ".BWB.",
+            ".....",
+            ".BWB.",
+            "..B..",
+        ]
+        self.verify_board(expected)
 
         # Verify both white groups have exactly one liberty at (2,2)
         for pos in whites:
@@ -117,19 +141,84 @@ class TestBoardCapturing(unittest.TestCase):
         # 3) Now play on (2,2) to remove that last liberty for *both* groups
         self.play(Stone.BLACK, 2, 2)
 
-        # 4) Assert both were captured
+        # 4) Assert both were captured using the verify_board method
+        expected = [
+            "..B..",
+            ".B.B.",
+            "..B..",
+            ".B.B.",
+            "..B..",
+        ]
+        self.verify_board(expected)
+
+    def test_multi_stone_group_capture(self):
+        """Test capturing a chain of connected stones.
+
+        Initial setup:           After capture:
+        . . . . .                . . . . .
+        . B B B .                . B B B .
+        . B W W B       -->      . B . . B
+        . B W B .                . B . B .
+        . . . . .                . . B . .
+        """
+        # Place three connected white stones
+        whites = [(2, 2), (2, 3), (3, 2)]
         for r, c in whites:
-            with self.subTest(white_stone=(r, c)):
-                self.assertEqual(
-                    self.b.grid[r][c],
-                    Stone.EMPTY,
-                    f"Stone at {r},{c} should be captured",
-                )
+            self.play(Stone.WHITE, r, c)
+
+        # Surround them with black
+        surround = [(1, 1), (1, 2), (1, 3), (2, 1), (2, 4), (3, 1), (3, 3)]
+        for r, c in surround:
+            self.play(Stone.BLACK, r, c)
+
+        # Verify initial state
+        initial = [
+            ".....",
+            ".BBB.",
+            ".BWWB",
+            ".BWB.",
+            ".....",
+        ]
+        self.verify_board(initial)
+
+        # Place the final black stone to capture
+        self.play(Stone.BLACK, 4, 2)
+
+        # Verify all white stones are captured
+        expected = [
+            ".....",
+            ".BBB.",
+            ".B..B",
+            ".B.B.",
+            "..B..",
+        ]
+        self.verify_board(expected)
 
     def test_suicide_not_allowed(self):
+        """Test that suicide moves are not allowed.
+
+        Board setup:
+        . . . . .
+        . . B . .
+        . B . B .
+        . . B . .
+        . . . . .
+
+        White cannot play at (2,2) as it would have no liberties.
+        """
         # Black surrounds (2,2)
         for r, c in [(1, 2), (2, 1), (2, 3), (3, 2)]:
             self.play(Stone.BLACK, r, c)
+
+        # Verify the board state
+        expected = [
+            ".....",
+            "..B..",
+            ".B.B.",
+            "..B..",
+            ".....",
+        ]
+        self.verify_board(expected)
 
         # Now White tries suicide at (2,2)
         with self.assertRaises(ValueError) as cm:
@@ -137,20 +226,70 @@ class TestBoardCapturing(unittest.TestCase):
         self.assertIn("suicide", str(cm.exception))
 
     def test_capture_on_edge(self):
-        # White on the top edge at (0,1)
-        self.play(Stone.WHITE, 0, 1)
-        # Black occupies its three edge‐liberties
-        for r, c in [(0, 0), (0, 2), (1, 1)]:
+        """Test capturing stones on the edge of the board.
+
+        Initial setup:   After capture:
+        W B . . .       . B . . .
+        B . . . .  -->  B . . . .
+        . . . . .       . . . . .
+        . . . . .       . . . . .
+        . . . . .       . . . . .
+        """
+        # White on the corner at (0,0)
+        self.play(Stone.WHITE, 0, 0)
+
+        # Verify initial state
+        initial = [
+            "W....",
+            ".....",
+            ".....",
+            ".....",
+            ".....",
+        ]
+        self.verify_board(initial)
+
+        # Black occupies its two edge‐liberties
+        for r, c in [(0, 1), (1, 0)]:
             self.play(Stone.BLACK, r, c)
-        # once all liberties are gone, white must be removed
-        self.assertEqual(self.b.grid[0][1], Stone.EMPTY)
+
+        # Verify final state
+        expected = [
+            ".B...",
+            "B....",
+            ".....",
+            ".....",
+            ".....",
+        ]
+        self.verify_board(expected)
 
     def test_no_false_capture(self):
+        """Test that stones with remaining liberties are not captured.
+
+        Board setup:
+        . . . . .
+        . . B . .
+        . B W . .
+        . . B . .
+        . . . . .
+
+        White still has a liberty at (2,3) so it should not be captured.
+        """
         # Surround white on only three sides
         self.play(Stone.WHITE, 2, 2)
         for r, c in [(1, 2), (2, 1), (3, 2)]:
             self.play(Stone.BLACK, r, c)
-        # one liberty remains at (2,3)
+
+        # Verify board state
+        expected = [
+            ".....",
+            "..B..",
+            ".BW..",
+            "..B..",
+            ".....",
+        ]
+        self.verify_board(expected)
+
+        # Verify white stone remains (not captured)
         self.assertEqual(self.b.grid[2][2], Stone.WHITE)
 
     def test_edge_captures(self):
@@ -166,20 +305,74 @@ class TestBoardCapturing(unittest.TestCase):
         ]
 
         for surrounded, surrounding in edge_cases:
-            # Create a fresh board
-            self.setUp()
+            with self.subTest(surrounded=surrounded):
+                # Create a fresh board for each subtest
+                b = Board(size=5)
 
-            # Place the white stone to be captured
-            self.play(Stone.WHITE, *surrounded)
+                def play(color, r, c):
+                    b.current_turn = color
+                    b.place_stone(r, c)
 
-            # Surround it with black
-            for pos in surrounding:
-                self.play(Stone.BLACK, *pos)
+                # Place the white stone to be captured
+                play(Stone.WHITE, *surrounded)
 
-            # Verify capture
-            self.assertEqual(self.b.grid[surrounded[0]][surrounded[1]], Stone.EMPTY)
+                # Surround it with black
+                for pos in surrounding:
+                    play(Stone.BLACK, *pos)
 
-    # …and so on for turn‐history, pass, undo, etc.
+                # Verify capture
+                self.assertEqual(b.grid[surrounded[0]][surrounded[1]], Stone.EMPTY)
+
+    def test_undo_after_capture(self):
+        # Setup a single capture
+        self.play(Stone.WHITE, 1, 1)
+        for r, c in [(0, 1), (1, 0), (1, 2), (2, 1)]:
+            self.play(Stone.BLACK, r, c)
+        # The white at (1,1) should be gone now:
+        self.assertEqual(self.b.grid[1][1], Stone.EMPTY)
+        # Undo that last capture move
+        last_move = self.b.move_history[-1]
+        self.b.undo()
+        # Capturing black should be removed
+        r, c = last_move
+        self.assertEqual(self.b.grid[r][c], Stone.EMPTY)
+        # White stone should be back
+        self.assertEqual(self.b.grid[1][1], Stone.WHITE)
+        # Turn restored to BLACK
+        self.assertEqual(self.b.current_turn, Stone.BLACK)
+
+    def test_move_history_and_turn_switch(self):
+        """Test that move history is correctly recorded and turns switch properly."""
+        # Play a few moves
+        self.play(Stone.BLACK, 0, 0)
+        self.play(Stone.WHITE, 1, 1)
+
+        # Verify move history
+        self.assertEqual(self.b.move_history, [(0, 0), (1, 1)])
+
+        # Verify turn switched correctly
+        self.assertEqual(self.b.current_turn, Stone.BLACK)
+
+    def test_pass_and_undo(self):
+        """Test that pass moves and undo functionality work correctly."""
+        # Make a move and then pass
+        self.play(Stone.BLACK, 0, 0)
+        self.b.pass_move()  # WHITE passes
+
+        # Verify move history and current turn
+        self.assertEqual(self.b.move_history, [(0, 0), None])
+        self.assertEqual(self.b.current_turn, Stone.BLACK)
+
+        # Undo the pass
+        self.b.undo()
+        self.assertEqual(self.b.move_history, [(0, 0)])
+        self.assertEqual(self.b.current_turn, Stone.WHITE)
+
+        # Undo the move
+        self.b.undo()
+        self.assertEqual(self.b.move_history, [])
+        self.assertEqual(self.b.current_turn, Stone.BLACK)
+        self.assertEqual(self.b.grid[0][0], Stone.EMPTY)
 
 
 if __name__ == "__main__":

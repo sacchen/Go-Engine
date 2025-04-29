@@ -82,6 +82,6 @@ class ConsoleUI:
 
 
 if __name__ == "__main__":
-    board = Board(9)
+    board = Board(5)
     ui = ConsoleUI(board)
     ui.run()
