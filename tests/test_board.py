@@ -1,5 +1,5 @@
 import unittest
-from board import Board, Stone
+from src.board import Board, Stone
 
 
 class TestBoard(unittest.TestCase):
@@ -41,7 +41,7 @@ class TestBoard(unittest.TestCase):
 
         # Test the group and liberties for the black group
         group, liberties = board.get_group_and_liberties(1, 1)
-        
+
         print("\nFound group:", group)
         print("Expected group:", {(1, 1), (1, 2), (2, 1)})
 
