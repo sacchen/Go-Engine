@@ -16,7 +16,10 @@ class Board:
             [Stone.EMPTY for _ in range(self.size)] for _ in range(self.size)
         ]
         self.current_turn: Stone = Stone.BLACK
+        # history of played points (None = pass)
         self.move_history: List[Optional[Tuple[int, int]]] = []
+        # parallel history of exactly which stones were removed on each move
+        self.captured_history: List[List[Tuple[int, int, Stone]]] = []
 
     def place_stone(self, row: int, col: int) -> None:
         """
@@ -36,6 +39,9 @@ class Board:
         # Remember previous state and tentatively place stone
         previous_state = self.grid[row][col]
         self.grid[row][col] = self.current_turn
+
+        # record which enemy stones we actually remove
+        captured_positions: List[Tuple[int, int, Stone]] = []
 
         # Determine enemy color
         enemy_color = Stone.BLACK if self.current_turn == Stone.WHITE else Stone.WHITE
@@ -64,6 +70,8 @@ class Board:
                 # Capture enemy group if no liberties
                 captured_any = True
                 for r, c in group:
+                    # record what we're about to remove
+                    captured_positions.append((r, c, enemy_color))
                     self.grid[r][c] = Stone.EMPTY
 
         # Check for suicide
@@ -77,6 +85,7 @@ class Board:
 
         # Finalize move
         self.move_history.append((row, col))
+        self.captured_history.append(captured_positions)
         self.switch_turn()
 
     def switch_turn(self) -> None:
@@ -85,16 +94,25 @@ class Board:
         )
 
     def pass_move(self) -> None:
-        self.move_history.append(None)  # Add None to represent a pass
+        self.move_history.append(None)
+        self.captured_history.append([])   # no captures on pass
         self.switch_turn()
 
     def undo(self) -> None:
         if not self.move_history:
             raise RuntimeError("No moves to undo")
         last_move = self.move_history.pop()
-        if last_move is not None:  # If not a pass move
+        captured = self.captured_history.pop()
+
+        if last_move is not None:
             row, col = last_move
+            # remove the stone we placed
             self.grid[row][col] = Stone.EMPTY
+
+        # restore any stones we captured on that move
+        for r, c, color in captured:
+            self.grid[r][c] = color
+
         self.switch_turn()
 
     def get_group_and_liberties(
