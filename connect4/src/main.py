@@ -1,19 +1,40 @@
 from board import Board, Slot
 from console_ui import ConsoleUI
 from bots import RandomBot
+import time
 
 
 def main():
     board = Board()
     ui = ConsoleUI(board)
-    # Create bot as yellow player
-    bot = RandomBot(Slot.YELLOW)
+
+    # Ask player to choose color
+    while True:
+        choice = input("Do you want to play as RED or YELLOW? r/y: ").lower()
+        if choice == "r":
+            player_color = Slot.RED
+            bot_color = Slot.YELLOW
+            print("You will play as RED.")
+            break
+        elif choice == "y":
+            player_color = Slot.YELLOW
+            bot_color = Slot.RED
+            print("You will player as YELLOW.")
+            break
+        elif choice == "exit":
+            print("Exiting the game. Goodbye!")
+            exit()
+        else:
+            print("Invalid color. Enter 'r' for RED or 'y' for YELLOW.")
+
+    # Create bot
+    bot = RandomBot(bot_color)
 
     while True:
         ui.render()
 
-        # Human player's turn (RED)
-        if board.current_turn == Slot.RED:
+        # Human player's turn
+        if board.current_turn == player_color:
             try:
                 col = ui.prompt_move()
                 if not board.drop_piece(col, board.current_turn):
@@ -30,8 +51,10 @@ def main():
                 print("\nThanks for playing!")
                 break
 
-        # Bot's turn (YELLOW)
+        # Bot's turn
         else:
+            print(f"Bot is thinking...")
+            time.sleep(1.0)
             col = bot.make_move(board)
             print(f"Bot players column {col}")
             board.drop_piece(col, Slot.YELLOW)
@@ -39,7 +62,10 @@ def main():
         # Check for win
         if board.check_win(board.current_turn):
             ui.render()
-            print(f"{board.current_turn.name} wins!")
+            winner_msg = (
+                "You win!" if board.current_turn == player_color else "Bot wins!"
+            )
+            print(f"{winner_msg} ({board.current_turn.name})")
             break
 
         # Check for draw
