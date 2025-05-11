@@ -38,10 +38,24 @@ class Board:
         return False  # Column is full
 
     def __str__(self):
-        rows = []
+        # Add column numbers at the top
+        result = " " + " ".join(str(i) for i in range(self.num_cols)) + "\n"
+        # Add a separator line
+        result += "━" * (self.num_cols * 2) + "\n"
+
+        # Create the board with better symbols
         for r in reversed(range(self.num_rows)):
-            rows.append(" ".join(slot.name[0] for slot in self.grid[r]))
-        return "\n".join(rows)
+            row_str = ""
+            for slot in self.grid[r]:
+                if slot == Slot.EMPTY:
+                    row_str += "⚪"
+                elif slot == Slot.RED:
+                    row_str += "🔴"
+                elif slot == Slot.YELLOW:
+                    row_str += "🟡"
+            result += row_str + "\n"
+
+        return result
 
     def check_win(self, player: Slot) -> bool:
         """
