@@ -15,11 +15,14 @@ class Board:
         self.grid: List[List[Stone]] = [
             [Stone.EMPTY for _ in range(self.size)] for _ in range(self.size)
         ]
+
         self.current_turn: Stone = Stone.BLACK
         # history of played points (None = pass)
         self.move_history: List[Optional[Tuple[int, int]]] = []
         # parallel history of exactly which stones were removed on each move
         self.captured_history: List[List[Tuple[int, int, Stone]]] = []
+        self.ko_point: Optional[Tuple[int, int]] = None
+        self.ko_history: List[Optional[Tuple[int, int]]] = []
 
     def place_stone(self, row: int, col: int) -> None:
         """
@@ -31,10 +34,15 @@ class Board:
         # Board state is only finalized after all checks pass.
         """
 
+        # Check for basic illegal moves
         if not (0 <= row < self.size and 0 <= col < self.size):
             raise IndexError(f"Move ({row},{col}) out of bounds")
         if self.grid[row][col] is not Stone.EMPTY:
             raise ValueError("Illegal move: space occupied.")
+
+        # Check if the move violates the current Ko restriction
+        if (row, col) == self.ko_point:
+            raise ValueError("Illegal move: this move is forbidden by the Ko rule.")
 
         # Remember previous state and tentatively place stone
         previous_state = self.grid[row][col]
@@ -82,6 +90,9 @@ class Board:
         if not liberties and not captured_any:
             self.grid[row][col] = previous_state  # Roll back
             raise ValueError("Illegal move: suicide is not allowed.")
+
+        # Clear existing ko_point from the previous move
+        self.ko_point = None
 
         # Finalize move
         self.move_history.append((row, col))
