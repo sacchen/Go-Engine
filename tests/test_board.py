@@ -1,3 +1,5 @@
+# python -m unittest tests.test_board
+
 import unittest
 from src.board import Board, Stone
 

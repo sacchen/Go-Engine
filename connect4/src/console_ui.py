@@ -10,4 +10,4 @@ class ConsoleUI:
 
     def prompt_move(self) -> int:
         move = input(f"{self.board.current_turn.name}, choose a column (0–6): ")
-        return move
+        return int(move)

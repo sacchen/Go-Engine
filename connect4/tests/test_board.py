@@ -1,5 +1,6 @@
 # Use
 # py -m unittest tests/test_board.py
+# UPDATE: python -m unittest connect4.tests.test_board
 
 import unittest
 from connect4.src.board import Board, Slot

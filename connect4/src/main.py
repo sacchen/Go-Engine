@@ -57,7 +57,7 @@ def main():
             time.sleep(1.0)
             col = bot.make_move(board)
             print(f"Bot players column {col}")
-            board.drop_piece(col, Slot.YELLOW)
+            board.drop_piece(col, bot_color)
 
         # Check for win
         if board.check_win(board.current_turn):
