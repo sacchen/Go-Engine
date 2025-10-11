@@ -2,14 +2,28 @@ from enum import Enum, auto
 from typing import List, Tuple, Set, Optional
 from collections import deque
 
+Point = Tuple[int, int]
+Group = Set[Point]
+Liberties = Set[Point]
+
 
 class Stone(Enum):
     EMPTY = auto()
     BLACK = auto()
     WHITE = auto()
 
+    @property
+    def opponent(self):
+        if self is Stone.BLACK:
+            return Stone.WHITE
+        if self is Stone.WHITE:
+            return Stone.BLACK
+        return Stone.EMPTY
+
 
 class Board:
+    NEIGHBORS = ((0, 1), (0, -1), (1, 0), (-1, 0))
+
     def __init__(self, size: int):
         self.size: int = size
         self.grid: List[List[Stone]] = [
@@ -18,12 +32,15 @@ class Board:
 
         self.current_turn: Stone = Stone.BLACK
         # history of played points (None = pass)
-        self.move_history: List[Optional[Tuple[int, int]]] = []
+        self.move_history: List[Optional[Point]] = []
         # parallel history of exactly which stones were removed on each move
         self.captured_history: List[List[Tuple[int, int, Stone]]] = []
-        self.ko_point: Optional[Tuple[int, int]] = None
-        self.ko_history: List[Optional[Tuple[int, int]]] = []
+        self.ko_point: Optional[Point] = None
+        self.ko_history: List[Optional[Point]] = []
         self.consecutive_passes: int = 0
+
+    def _is_on_board(self, row: int, col: int) -> bool:
+        return 0 <= row < self.size and 0 <= col < self.size
 
     def place_stone(self, row: int, col: int) -> None:
         """
@@ -36,7 +53,7 @@ class Board:
         """
 
         # Check for basic illegal moves
-        if not (0 <= row < self.size and 0 <= col < self.size):
+        if not self._is_on_board(row, col):
             raise IndexError(f"Move ({row},{col}) out of bounds")
         if self.grid[row][col] is not Stone.EMPTY:
             raise ValueError("Illegal move: space occupied.")
@@ -53,27 +70,25 @@ class Board:
         captured_positions: List[Tuple[int, int, Stone]] = []
 
         # Determine enemy color
-        enemy_color = Stone.BLACK if self.current_turn == Stone.WHITE else Stone.WHITE
+        enemy_color = self.current_turn.opponent
         captured_any = False
 
         # Collect unique adjacent enemy groups
-        # Use a set to avoid rechecking the same group
-        adjacent_enemies = {
-            (row + dr, col + dc)
-            for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]
-            if 0 <= row + dr < self.size
-            and 0 <= col + dc < self.size
-            and self.grid[row + dr][col + dc] == enemy_color
-        }
+        processed_groups: Set[Point] = set()  # Renamed 'checked' for clarity
+        for dr, dc in self.NEIGHBORS:
+            neighbor_row, neighbor_col = row + dr, col + dc
 
-        checked = set()
-        for er, ec in adjacent_enemies:
-            if (er, ec) in checked:
-                continue  # Skip if this group was already checked
+            # Use a 'continue' pattern to keep the main logic clean
+            if not self._is_on_board(neighbor_row, neighbor_col):
+                continue
+            if (neighbor_row, neighbor_col) in processed_groups:
+                continue
+            if self.grid[neighbor_row][neighbor_col] != enemy_color:
+                continue
 
-            # Check liberties of enemy group
-            group, liberties = self.get_group_and_liberties(er, ec)
-            checked.update(group)
+            # If we get here, we've found a new enemy group to check.
+            group, liberties = self.get_group_and_liberties(neighbor_row, neighbor_col)
+            processed_groups.update(group)  # Mark the whole group as processed
 
             if not liberties:
                 # Capture enemy group if no liberties
@@ -113,13 +128,13 @@ class Board:
         self.switch_turn()
 
     def switch_turn(self) -> None:
-        self.current_turn = (
-            Stone.BLACK if self.current_turn is Stone.WHITE else Stone.WHITE
-        )
+        self.current_turn = self.current_turn.opponent
 
     def pass_move(self) -> None:
+        self.ko_point = None  # A pass resolves any ko situation.
         self.move_history.append(None)
         self.captured_history.append([])  # no captures on pass
+        self.ko_history.append(self.ko_point)  # Record the change to ko history
         self.consecutive_passes += 1
         self.switch_turn()
 
@@ -129,8 +144,7 @@ class Board:
 
         last_move = self.move_history.pop()
         captured = self.captured_history.pop()
-        if self.ko_history:  # Check if ko_history is not empty
-            self.ko_history.pop()
+        self.ko_history.pop()
 
         # Restore the ko_point to what it was BEFORE the last move
         self.ko_point = self.ko_history[-1] if self.ko_history else None
@@ -271,6 +285,10 @@ class Board:
         return {"black_territory": black_territory, "white_territory": white_territory}
 
     def get_final_scores(self, komi: float = 6.5) -> dict:
+        """
+        Calculates the final score using Chinese scoring rules.
+        Score = (Territory) + (Number of stones on the board)
+        """
         scores = {"black": 0, "white": 0}
 
         # Get territory points
