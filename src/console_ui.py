@@ -78,6 +78,17 @@ class ConsoleUI:
     def run(self):
         while True:
             self.display()
+
+            if self.board.is_over:
+                print("Game Over! Two consecutive passes.")
+                scores = self.board.get_final_scores()
+                print(
+                    f"Final Scores -> Black: {scores['black']}, White: {scores['white']}"
+                )
+                winner = "Black" if scores["black"] > scores["white"] else "White"
+                print(f"{winner} wins!")
+                break  # End the game
+
             self.prompt_move()
 
 
