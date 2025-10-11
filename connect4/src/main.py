@@ -3,6 +3,12 @@ from console_ui import ConsoleUI
 from bots import RandomBot
 import time
 
+# Human vs bot
+# python connect4/src/main.py
+
+# bot vs bot
+# tournament.py
+# Edit the main function
 
 def main():
     board = Board()

@@ -10,7 +10,6 @@ class Stone(Enum):
 
 class Board:
     def __init__(self, size: int):
-
         self.size: int = size
         self.grid: List[List[Stone]] = [
             [Stone.EMPTY for _ in range(self.size)] for _ in range(self.size)
@@ -91,12 +90,23 @@ class Board:
             self.grid[row][col] = previous_state  # Roll back
             raise ValueError("Illegal move: suicide is not allowed.")
 
-        # Clear existing ko_point from the previous move
+        # Clear existing ko_point from the previous turn
         self.ko_point = None
+
+        # Check if this move created a new ko situation.
+        if captured_any and len(captured_positions) == 1:
+            # A single stone was captured. The point where it was captured is the new ko_point.
+            captured_r, captured_c, _ = captured_positions[0]
+            # We must also check that the capturing group is also a single stone in atari.
+            # This prevents setting ko in non-ko situations like "snapback".
+            capturing_group, capturing_libs = self.get_group_and_liberties(row, col)
+            if len(capturing_group) == 1:
+                self.ko_point = (captured_r, captured_c)
 
         # Finalize move
         self.move_history.append((row, col))
         self.captured_history.append(captured_positions)
+        self.ko_history.append(self.ko_point)
         self.switch_turn()
 
     def switch_turn(self) -> None:
@@ -106,14 +116,19 @@ class Board:
 
     def pass_move(self) -> None:
         self.move_history.append(None)
-        self.captured_history.append([])   # no captures on pass
+        self.captured_history.append([])  # no captures on pass
         self.switch_turn()
 
     def undo(self) -> None:
         if not self.move_history:
             raise RuntimeError("No moves to undo")
+
         last_move = self.move_history.pop()
         captured = self.captured_history.pop()
+        self.ko_history.pop()
+
+        # Restore the ko_point to what it was BEFORE the last move
+        self.ko_point = self.ko_history[-1] if self.ko_history else None
 
         if last_move is not None:
             row, col = last_move
