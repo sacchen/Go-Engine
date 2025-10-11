@@ -221,37 +221,56 @@ class Board:
         """
         Calculates territory points for each player.
 
-        Territory is only counted if it's completely enclosed by stones of one color
-        (or by stones of one color + board edges).
+        Territory is counted for empty points that are completely surrounded
+        by stones of one color (or by stones of one color + board edges).
         """
         black_territory = 0
         white_territory = 0
-        visited = set()
 
         for r in range(self.size):
             for c in range(self.size):
-                if self.grid[r][c] == Stone.EMPTY and (r, c) not in visited:
-                    region_points, bordering_colors = self._find_empty_region_reach(
-                        r, c
-                    )
+                if self.grid[r][c] == Stone.EMPTY:
+                    # Check if this empty point is enclosed by stones of one color
+                    territory_color = self._get_territory_color(r, c)
+                    if territory_color == Stone.BLACK:
+                        black_territory += 1
+                    elif territory_color == Stone.WHITE:
+                        white_territory += 1
 
-                    # Mark all points in this region as visited
-                    visited.update(region_points)
+        return {"black_territory": black_territory, "white_territory": white_territory}
 
-                    # Check if this region is properly enclosed territory
-                    has_black_border = Stone.BLACK in bordering_colors
-                    has_white_border = Stone.WHITE in bordering_colors
-                    touches_edge = Stone.EMPTY in bordering_colors
+    def _get_territory_color(self, row: int, col: int) -> Stone:
+        """
+        Determines if an empty point belongs to black or white territory.
+        Returns Stone.EMPTY if it's not territory for either player.
+        """
+        if self.grid[row][col] != Stone.EMPTY:
+            return Stone.EMPTY
 
-                    # Territory must be enclosed by only one color (or one color + edges)
-                    if has_black_border and not has_white_border:
-                        # Only black borders this region (possibly with edges)
-                        black_territory += len(region_points)
-                    elif has_white_border and not has_black_border:
-                        # Only white borders this region (possibly with edges)
-                        white_territory += len(region_points)
-                    # If both colors border it, or it touches edges without being enclosed,
-                    # it's not territory for either player
+        # Check all adjacent positions to see what colors border this point
+        bordering_colors = set()
+
+        for dr, dc in self.NEIGHBORS:
+            nr, nc = row + dr, col + dc
+            if not self._is_on_board(nr, nc):
+                # This point is on the board edge
+                bordering_colors.add(Stone.EMPTY)
+            else:
+                neighbor_stone = self.grid[nr][nc]
+                if neighbor_stone != Stone.EMPTY:
+                    bordering_colors.add(neighbor_stone)
+
+        # Territory belongs to a player if only that player's stones border it
+        has_black_border = Stone.BLACK in bordering_colors
+        has_white_border = Stone.WHITE in bordering_colors
+        touches_edge = Stone.EMPTY in bordering_colors
+
+        if has_black_border and not has_white_border:
+            return Stone.BLACK
+        elif has_white_border and not has_black_border:
+            return Stone.WHITE
+        else:
+            return Stone.EMPTY
 
     def _find_empty_region_reach(
         self, start_row: int, start_col: int
