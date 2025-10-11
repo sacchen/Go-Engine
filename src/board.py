@@ -217,60 +217,14 @@ class Board:
     def is_over(self) -> bool:
         return self.consecutive_passes >= 2
 
-    def find_territory_region(
-        self, start_row: int, start_col: int
-    ) -> Tuple[Set[Tuple[int, int]], Set[Stone]]:
-        """
-        Finds a single contiguous region of empty points using BFS.
-
-        Inputs:
-            start_row: The starting row of the empty point.
-            start_col: The starting column of the empty point.
-
-        Returns:
-            A tuple containing:
-            - A set of (row, col) tuples for all points in the region.
-            - A set of Stone enums for all bordering stone colors.
-        """
-        # 1. Initialization
-        if self.grid[start_row][start_col] is not Stone.EMPTY:
-            return set(), set()
-
-        queue = deque([(start_row, start_col)])
-        visited_in_region = {(start_row, start_col)}
-
-        region_points = set()
-        border_colors = set()
-
-        # 2. The BFS Loop
-        while queue:
-            r, c = queue.popleft()
-            region_points.add((r, c))
-
-            # Check all four neighbors
-            for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                nr, nc = r + dr, c + dc
-
-                # A. Make sure inside board
-                if not (0 <= nr < self.size and 0 <= nc < self.size):
-                    continue
-
-                # B. If neighbor is an unvisited empty stone, expand the search
-                if (
-                    self.grid[nr][nc] is Stone.EMPTY
-                    and (nr, nc) not in visited_in_region
-                ):
-                    visited_in_region.add((nr, nc))
-                    queue.append((nr, nc))
-
-                # C. If neighbor is a colored stone, record its color
-                elif self.grid[nr][nc] is not Stone.EMPTY:
-                    border_colors.add(self.grid[nr][nc])
-
-        # 3. Return results
-        return region_points, border_colors
-
     def calculate_scores(self) -> dict:
+        """
+        Calculates territory points for each player.
+
+        This method iterates through each point on the board. If an unvisited
+        empty point is found, it starts a search to determine which player(s)
+        can reach that empty region.
+        """
         black_territory = 0
         white_territory = 0
         visited = set()
@@ -278,22 +232,68 @@ class Board:
         for r in range(self.size):
             for c in range(self.size):
                 if self.grid[r][c] == Stone.EMPTY and (r, c) not in visited:
-                    # 1. Start a flood-fill DFS from (r, c)
-                    # 2. This fill returns the points in the region
-                    #    and the colors of the stones bordering it.
-                    region_points, border_colors = self.find_territory_region(r, c)
+                    # This group of empty points hasn't been scored yet.
+                    # Let's find out who it belongs to.
+                    region_points, reaches = self._find_empty_region_reach(r, c)
 
-                    # 3. Assign territory based on border_colors
-                    if border_colors == {Stone.BLACK}:
-                        black_territory += len(region_points)
-                    elif border_colors == {Stone.WHITE}:
-                        white_territory += len(region_points)
-
-                    # 4. Mark all points in the region as visited
+                    # Mark all points in this region as visited so we don't count them again.
                     visited.update(region_points)
 
-        # Dictionary contains territory, and not the final score
+                    # A region is territory if it can only be reached by one color.
+                    reaches_black = Stone.BLACK in reaches
+                    reaches_white = Stone.WHITE in reaches
+
+                    if reaches_black and not reaches_white:
+                        black_territory += len(region_points)
+                    elif reaches_white and not reaches_black:
+                        white_territory += len(region_points)
+
         return {"black_territory": black_territory, "white_territory": white_territory}
+
+    def _find_empty_region_reach(
+        self, start_row: int, start_col: int
+    ) -> Tuple[Set[Point], Set[Stone]]:
+        """
+        Finds a contiguous region of empty points and determines which stone
+        colors are reachable from it.
+
+        Args:
+            start_row: The starting row of the empty point.
+            start_col: The starting column of the empty point.
+
+        Returns:
+            A tuple containing:
+            - A set of (row, col) points belonging to the contiguous empty region.
+            - A set of Stone enums (BLACK, WHITE) that border the region.
+        """
+        if self.grid[start_row][start_col] is not Stone.EMPTY:
+            return set(), set()
+
+        region_points = set()
+        reachable_colors = set()
+        queue = deque([(start_row, start_col)])
+        visited_in_region = {(start_row, start_col)}
+
+        while queue:
+            r, c = queue.popleft()
+            region_points.add((r, c))
+
+            for dr, dc in self.NEIGHBORS:
+                nr, nc = r + dr, c + dc
+
+                if not self._is_on_board(nr, nc):
+                    continue
+
+                neighbor_stone = self.grid[nr][nc]
+                if neighbor_stone is Stone.EMPTY:
+                    if (nr, nc) not in visited_in_region:
+                        visited_in_region.add((nr, nc))
+                        queue.append((nr, nc))
+                else:
+                    # We've reached a colored stone from this empty region.
+                    reachable_colors.add(neighbor_stone)
+
+        return region_points, reachable_colors
 
     def get_final_scores(self, komi: float = 6.5) -> dict:
         """
