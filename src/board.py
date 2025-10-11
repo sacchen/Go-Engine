@@ -38,6 +38,7 @@ class Board:
         self.ko_point: Optional[Point] = None
         self.ko_history: List[Optional[Point]] = []
         self.consecutive_passes: int = 0
+        self.consecutive_passes_history: List[int] = []
 
     def _is_on_board(self, row: int, col: int) -> bool:
         return 0 <= row < self.size and 0 <= col < self.size
@@ -124,6 +125,7 @@ class Board:
         self.move_history.append((row, col))
         self.captured_history.append(captured_positions)
         self.ko_history.append(self.ko_point)
+        self.consecutive_passes_history.append(self.consecutive_passes)
         self.consecutive_passes = 0
         self.switch_turn()
 
@@ -135,6 +137,7 @@ class Board:
         self.move_history.append(None)
         self.captured_history.append([])  # no captures on pass
         self.ko_history.append(self.ko_point)  # Record the change to ko history
+        self.consecutive_passes_history.append(self.consecutive_passes)
         self.consecutive_passes += 1
         self.switch_turn()
 
@@ -145,9 +148,17 @@ class Board:
         last_move = self.move_history.pop()
         captured = self.captured_history.pop()
         self.ko_history.pop()
+        self.consecutive_passes_history.pop()
 
         # Restore the ko_point to what it was BEFORE the last move
         self.ko_point = self.ko_history[-1] if self.ko_history else None
+
+        # Restore the consecutive_passes to what it was BEFORE the last move
+        self.consecutive_passes = (
+            self.consecutive_passes_history[-1]
+            if self.consecutive_passes_history
+            else 0
+        )
 
         if last_move is not None:
             row, col = last_move
