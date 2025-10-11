@@ -1,5 +1,6 @@
 from enum import Enum, auto
 from typing import List, Tuple, Set, Optional
+from collections import deque
 
 
 class Stone(Enum):
@@ -10,16 +11,19 @@ class Stone(Enum):
 
 class Board:
     def __init__(self, size: int):
-
         self.size: int = size
         self.grid: List[List[Stone]] = [
             [Stone.EMPTY for _ in range(self.size)] for _ in range(self.size)
         ]
+
         self.current_turn: Stone = Stone.BLACK
         # history of played points (None = pass)
         self.move_history: List[Optional[Tuple[int, int]]] = []
         # parallel history of exactly which stones were removed on each move
         self.captured_history: List[List[Tuple[int, int, Stone]]] = []
+        self.ko_point: Optional[Tuple[int, int]] = None
+        self.ko_history: List[Optional[Tuple[int, int]]] = []
+        self.consecutive_passes: int = 0
 
     def place_stone(self, row: int, col: int) -> None:
         """
@@ -31,10 +35,15 @@ class Board:
         # Board state is only finalized after all checks pass.
         """
 
+        # Check for basic illegal moves
         if not (0 <= row < self.size and 0 <= col < self.size):
             raise IndexError(f"Move ({row},{col}) out of bounds")
         if self.grid[row][col] is not Stone.EMPTY:
             raise ValueError("Illegal move: space occupied.")
+
+        # Check if the move violates the current Ko restriction
+        if (row, col) == self.ko_point:
+            raise ValueError("Illegal move: this move is forbidden by the Ko rule.")
 
         # Remember previous state and tentatively place stone
         previous_state = self.grid[row][col]
@@ -83,9 +92,24 @@ class Board:
             self.grid[row][col] = previous_state  # Roll back
             raise ValueError("Illegal move: suicide is not allowed.")
 
+        # Clear existing ko_point from the previous turn
+        self.ko_point = None
+
+        # Check if this move created a new ko situation.
+        if captured_any and len(captured_positions) == 1:
+            # A single stone was captured. The point where it was captured is the new ko_point.
+            captured_r, captured_c, _ = captured_positions[0]
+            # We must also check that the capturing group is also a single stone in atari.
+            # This prevents setting ko in non-ko situations like "snapback".
+            capturing_group, capturing_libs = self.get_group_and_liberties(row, col)
+            if len(capturing_group) == 1:
+                self.ko_point = (captured_r, captured_c)
+
         # Finalize move
         self.move_history.append((row, col))
         self.captured_history.append(captured_positions)
+        self.ko_history.append(self.ko_point)
+        self.consecutive_passes = 0
         self.switch_turn()
 
     def switch_turn(self) -> None:
@@ -95,14 +119,21 @@ class Board:
 
     def pass_move(self) -> None:
         self.move_history.append(None)
-        self.captured_history.append([])   # no captures on pass
+        self.captured_history.append([])  # no captures on pass
+        self.consecutive_passes += 1
         self.switch_turn()
 
     def undo(self) -> None:
         if not self.move_history:
             raise RuntimeError("No moves to undo")
+
         last_move = self.move_history.pop()
         captured = self.captured_history.pop()
+        if self.ko_history:  # Check if ko_history is not empty
+            self.ko_history.pop()
+
+        # Restore the ko_point to what it was BEFORE the last move
+        self.ko_point = self.ko_history[-1] if self.ko_history else None
 
         if last_move is not None:
             row, col = last_move
@@ -155,3 +186,107 @@ class Board:
 
         dfs(row, col)
         return (group, liberties)
+
+    @property
+    # Decorator that turns method into a "getter," or read-only.
+    def is_over(self) -> bool:
+        return self.consecutive_passes >= 2
+
+    def find_territory_region(
+        self, start_row: int, start_col: int
+    ) -> Tuple[Set[Tuple[int, int]], Set[Stone]]:
+        """
+        Finds a single contiguous region of empty points using BFS.
+
+        Inputs:
+            start_row: The starting row of the empty point.
+            start_col: The starting column of the empty point.
+
+        Returns:
+            A tuple containing:
+            - A set of (row, col) tuples for all points in the region.
+            - A set of Stone enums for all bordering stone colors.
+        """
+        # 1. Initialization
+        if self.grid[start_row][start_col] is not Stone.EMPTY:
+            return set(), set()
+
+        queue = deque([(start_row, start_col)])
+        visited_in_region = {(start_row, start_col)}
+
+        region_points = set()
+        border_colors = set()
+
+        # 2. The BFS Loop
+        while queue:
+            r, c = queue.popleft()
+            region_points.add((r, c))
+
+            # Check all four neighbors
+            for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+                nr, nc = r + dr, c + dc
+
+                # A. Make sure inside board
+                if not (0 <= nr < self.size and 0 <= nc < self.size):
+                    continue
+
+                # B. If neighbor is an unvisited empty stone, expand the search
+                if (
+                    self.grid[nr][nc] is Stone.EMPTY
+                    and (nr, nc) not in visited_in_region
+                ):
+                    visited_in_region.add((nr, nc))
+                    queue.append((nr, nc))
+
+                # C. If neighbor is a colored stone, record its color
+                elif self.grid[nr][nc] is not Stone.EMPTY:
+                    border_colors.add(self.grid[nr][nc])
+
+        # 3. Return results
+        return region_points, border_colors
+
+    def calculate_scores(self) -> dict:
+        black_territory = 0
+        white_territory = 0
+        visited = set()
+
+        for r in range(self.size):
+            for c in range(self.size):
+                if self.grid[r][c] == Stone.EMPTY and (r, c) not in visited:
+                    # 1. Start a flood-fill DFS from (r, c)
+                    # 2. This fill returns the points in the region
+                    #    and the colors of the stones bordering it.
+                    region_points, border_colors = self.find_territory_region(r, c)
+
+                    # 3. Assign territory based on border_colors
+                    if border_colors == {Stone.BLACK}:
+                        black_territory += len(region_points)
+                    elif border_colors == {Stone.WHITE}:
+                        white_territory += len(region_points)
+
+                    # 4. Mark all points in the region as visited
+                    visited.update(region_points)
+
+        # Dictionary contains territory, and not the final score
+        return {"black_territory": black_territory, "white_territory": white_territory}
+
+    def get_final_scores(self, komi: float = 6.5) -> dict:
+        scores = {"black": 0, "white": 0}
+
+        # Get territory points
+        territory = self.calculate_scores()
+        scores["black"] += territory["black_territory"]
+        scores["white"] += territory["white_territory"]
+
+        # Add stone points
+        for r in range(self.size):
+            for c in range(self.size):
+                if self.grid[r][c] == Stone.BLACK:
+                    scores["black"] += 1
+                elif self.grid[r][c] == Stone.WHITE:
+                    scores["white"] += 1
+
+        # Add komi for white
+        scores["white"] += komi
+
+        return scores
