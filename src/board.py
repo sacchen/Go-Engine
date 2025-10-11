@@ -221,9 +221,8 @@ class Board:
         """
         Calculates territory points for each player.
 
-        This method iterates through each point on the board. If an unvisited
-        empty point is found, it starts a search to determine which player(s)
-        can reach that empty region.
+        Territory is only counted if it's completely enclosed by stones of one color
+        (or by stones of one color + board edges).
         """
         black_territory = 0
         white_territory = 0
@@ -232,30 +231,34 @@ class Board:
         for r in range(self.size):
             for c in range(self.size):
                 if self.grid[r][c] == Stone.EMPTY and (r, c) not in visited:
-                    # This group of empty points hasn't been scored yet.
-                    # Let's find out who it belongs to.
-                    region_points, reaches = self._find_empty_region_reach(r, c)
+                    region_points, bordering_colors = self._find_empty_region_reach(
+                        r, c
+                    )
 
-                    # Mark all points in this region as visited so we don't count them again.
+                    # Mark all points in this region as visited
                     visited.update(region_points)
 
-                    # A region is territory if it can only be reached by one color.
-                    reaches_black = Stone.BLACK in reaches
-                    reaches_white = Stone.WHITE in reaches
+                    # Check if this region is properly enclosed territory
+                    has_black_border = Stone.BLACK in bordering_colors
+                    has_white_border = Stone.WHITE in bordering_colors
+                    touches_edge = Stone.EMPTY in bordering_colors
 
-                    if reaches_black and not reaches_white:
+                    # Territory must be enclosed by only one color (or one color + edges)
+                    if has_black_border and not has_white_border:
+                        # Only black borders this region (possibly with edges)
                         black_territory += len(region_points)
-                    elif reaches_white and not reaches_black:
+                    elif has_white_border and not has_black_border:
+                        # Only white borders this region (possibly with edges)
                         white_territory += len(region_points)
-
-        return {"black_territory": black_territory, "white_territory": white_territory}
+                    # If both colors border it, or it touches edges without being enclosed,
+                    # it's not territory for either player
 
     def _find_empty_region_reach(
         self, start_row: int, start_col: int
     ) -> Tuple[Set[Point], Set[Stone]]:
         """
         Finds a contiguous region of empty points and determines which stone
-        colors are reachable from it.
+        colors border it (not just reach it).
 
         Args:
             start_row: The starting row of the empty point.
@@ -270,7 +273,7 @@ class Board:
             return set(), set()
 
         region_points = set()
-        reachable_colors = set()
+        bordering_colors = set()
         queue = deque([(start_row, start_col)])
         visited_in_region = {(start_row, start_col)}
 
@@ -282,6 +285,8 @@ class Board:
                 nr, nc = r + dr, c + dc
 
                 if not self._is_on_board(nr, nc):
+                    # This empty point is on the edge - it's not enclosed
+                    bordering_colors.add(Stone.EMPTY)  # Mark as not fully enclosed
                     continue
 
                 neighbor_stone = self.grid[nr][nc]
@@ -290,10 +295,10 @@ class Board:
                         visited_in_region.add((nr, nc))
                         queue.append((nr, nc))
                 else:
-                    # We've reached a colored stone from this empty region.
-                    reachable_colors.add(neighbor_stone)
+                    # We've found a colored stone bordering this empty region
+                    bordering_colors.add(neighbor_stone)
 
-        return region_points, reachable_colors
+        return region_points, bordering_colors
 
     def get_final_scores(self, komi: float = 6.5) -> dict:
         """
