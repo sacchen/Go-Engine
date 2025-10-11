@@ -1,12 +1,11 @@
-#python -m unittest tests.test_capture_mechanics
+# python -m unittest tests.test_capture_mechanics
 
 import unittest
 from src.board import Board, Stone
-from typing import List, Tuple, Optional, Set
+from typing import List, Tuple
 
 
 class TestBoardCapturing(unittest.TestCase):
-
     def setUp(self):
         self.b = Board(size=5)
 
@@ -24,11 +23,10 @@ class TestBoardCapturing(unittest.TestCase):
         """Setup board from a string layout (B=blacak, W=white, .=empty)."""
         for r, row in enumerate(layout):
             for c, cell in enumerate(row):
-                if cell == 'B':
+                if cell == "B":
                     self.play(Stone.BLACK, r, c)
-                elif cell == 'W':
+                elif cell == "W":
                     self.play(Stone.WHITE, r, c)
-
 
     def verify_board(self, expected_layout):
         """Verify the board matches the expected layout.
@@ -394,7 +392,7 @@ class TestBoardCapturing(unittest.TestCase):
 
     def test_ko_rule_basic(self):
         """Test that immediate recapture is prevented by Ko rule."""
-        
+
         # Step 1: Setup the board
         initial_layout = [
             ".W.W.",
@@ -404,27 +402,26 @@ class TestBoardCapturing(unittest.TestCase):
             ".....",
         ]
         self.setup_board(initial_layout)
-        
+
         # Step 2: Verify the setup worked
         self.verify_board(initial_layout)
-        
-        # Step 3: Black captures the white stone at (0, 1)
+
+        # Step 3: Black captures the white stone with (0, 2)
         self.play(Stone.BLACK, 0, 2)
-        
+
         # Step 4: Verify the capture was successful
         # The new black stone should be at (0, 2)
         self.assertEqual(self.b.grid[0][2], Stone.BLACK)
         # The captured white stone's location (1, 2) should now be EMPTY
         self.assertEqual(self.b.grid[1][2], Stone.EMPTY)
-        
+
         # Step 5: White tries to immediately recapture by playing at (1, 2)
         # This move is illegal due to the Ko rule
         with self.assertRaises(ValueError) as cm:
             self.play(Stone.WHITE, 1, 2)
-        
+
         # Step 6: Verify the error message mentions Ko
         self.assertIn("ko", str(cm.exception).lower())
-
 
 
 if __name__ == "__main__":

@@ -10,7 +10,6 @@ class Stone(Enum):
 
 class Board:
     def __init__(self, size: int):
-
         self.size: int = size
         self.grid: List[List[Stone]] = [
             [Stone.EMPTY for _ in range(self.size)] for _ in range(self.size)
@@ -101,7 +100,7 @@ class Board:
             # We must also check that the capturing group is also a single stone in atari.
             # This prevents setting ko in non-ko situations like "snapback".
             capturing_group, capturing_libs = self.get_group_and_liberties(row, col)
-            if len(capturing_group) == 1 and len(capturing_libs) == 1:
+            if len(capturing_group) == 1:
                 self.ko_point = (captured_r, captured_c)
 
         # Finalize move
@@ -117,12 +116,13 @@ class Board:
 
     def pass_move(self) -> None:
         self.move_history.append(None)
-        self.captured_history.append([])   # no captures on pass
+        self.captured_history.append([])  # no captures on pass
         self.switch_turn()
 
     def undo(self) -> None:
         if not self.move_history:
             raise RuntimeError("No moves to undo")
+
         last_move = self.move_history.pop()
         captured = self.captured_history.pop()
         self.ko_history.pop()
